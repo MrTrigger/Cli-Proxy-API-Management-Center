@@ -9,6 +9,7 @@ on:
       - 'package.json'
       - 'bun.lock'
       - 'Dockerfile'
+      - 'backend-patches/**'
       - '.dockerignore'
       - '.github/workflows/triggerlab-image.yml'
   workflow_dispatch:

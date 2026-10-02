@@ -1617,7 +1617,12 @@
     "ledger_cards": "卡片",
     "ledger_show_emails": "顯示郵箱",
     "ledger_hide_emails": "隱藏郵箱",
-    "ledger_resets_available": "{{count}} 次可用"
+    "ledger_resets_available": "{{count}} 次可用",
+    "ledger_overall": "整體每週限額",
+    "ledger_fable": "Fable 每週限額",
+    "ledger_accounts_blocked_one": "{{count}} 個帳號受共用限額阻擋",
+    "ledger_accounts_blocked_other": "{{count}} 個帳號受共用限額阻擋",
+    "ledger_blocked_by": "受 {{limit}} 限額阻擋"
   },
   "plugin_management": {
     "title": "插件管理",

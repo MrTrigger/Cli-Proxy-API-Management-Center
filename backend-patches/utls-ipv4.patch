@@ -1,0 +1,72 @@
+diff --git i/internal/runtime/executor/helps/utls_client.go w/internal/runtime/executor/helps/utls_client.go
+index f832748..829ac38 100644
+--- i/internal/runtime/executor/helps/utls_client.go
++++ w/internal/runtime/executor/helps/utls_client.go
+@@ -7,6 +7,7 @@ import (
+ 	"io"
+ 	"net"
+ 	"net/http"
++	"os"
+ 	"strings"
+ 	"sync"
+ 	"time"
+@@ -67,12 +68,19 @@ func newUtlsRoundTripper(proxyURL string) *utlsRoundTripper {
+ 	return &utlsRoundTripper{dialer: dialer}
+ }
+ 
++func utlsNetwork(network string) string {
++	if network == "tcp" && os.Getenv("CLIPROXY_FORCE_IPV4") == "1" {
++		return "tcp4"
++	}
++	return network
++}
++
+ func (t *utlsRoundTripper) createConnection(ctx context.Context, host, addr string) (*tls.UConn, error) {
+ 	contextDialer, ok := t.dialer.(proxy.ContextDialer)
+ 	if !ok {
+ 		return nil, fmt.Errorf("utls: dialer does not support context cancellation")
+ 	}
+-	conn, errDial := contextDialer.DialContext(ctx, "tcp", addr)
++	conn, errDial := contextDialer.DialContext(ctx, utlsNetwork("tcp"), addr)
+ 	if errDial != nil {
+ 		return nil, fmt.Errorf("utls: dial upstream: %w", errDial)
+ 	}
+@@ -334,6 +342,7 @@ func newClaudeCodeRoundTripper(proxyURL string) http.RoundTripper {
+ 	transport := &http.Transport{
+ 		ForceAttemptHTTP2: false,
+ 		DialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
++			network = utlsNetwork(network)
+ 			var (
+ 				conn net.Conn
+ 				err  error
+diff --git i/internal/runtime/executor/helps/utls_client_test.go w/internal/runtime/executor/helps/utls_client_test.go
+index 1b85b0a..8eafa31 100644
+--- i/internal/runtime/executor/helps/utls_client_test.go
++++ w/internal/runtime/executor/helps/utls_client_test.go
+@@ -639,3 +639,26 @@ func summarizeClaudeCodeClientHelloSpec(t *testing.T, spec *tls.ClientHelloSpec)
+ 	summary.JA3MD5 = hex.EncodeToString(digest[:])
+ 	return summary
+ }
++
++func TestUtlsConnectionAddressFamily(t *testing.T) {
++	for _, tc := range []struct{ setting, want string }{{"", "tcp"}, {"0", "tcp"}, {"1", "tcp4"}} {
++		t.Run(tc.setting+tc.want, func(t *testing.T) {
++			t.Setenv("CLIPROXY_FORCE_IPV4", tc.setting)
++			stopped := errors.New("stop before TLS handshake")
++			dialer := contextDialerFunc(func(ctx context.Context, network, addr string) (net.Conn, error) {
++				if network != tc.want {
++					t.Fatalf("dial network = %q, want %q", network, tc.want)
++				}
++				if addr != "chatgpt.com:443" {
++					t.Fatalf("dial address = %q", addr)
++				}
++				return nil, stopped
++			})
++			transport := &utlsRoundTripper{dialer: dialer}
++			_, err := transport.createConnection(context.Background(), "chatgpt.com", "chatgpt.com:443")
++			if !errors.Is(err, stopped) {
++				t.Fatalf("connection error = %v, want dial error", err)
++			}
++		})
++	}
++}

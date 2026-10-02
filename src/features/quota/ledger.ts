@@ -27,6 +27,7 @@ type LedgerAccountBase = {
   entry: QuotaFileEntry;
   windows: LedgerWindow[];
   primary: LedgerWindow | null;
+  blockingWindow: LedgerWindow | null;
 };
 
 export type LedgerAccount = LedgerAccountBase &
@@ -72,7 +73,15 @@ export function buildLedgerAccount(entry: QuotaFileEntry, store: LedgerQuotaStor
       remaining: remainingPercent(window.usedPercent),
       resetAtMs: window.resetAtMs ?? null,
     }));
-    const base = { entry, windows: mapped, primary: mapped[0] ?? null };
+    const blockingWindow =
+      entry.type === 'claude'
+        ? (mapped
+            .filter(
+              (window) => ['seven-day', 'five-hour'].includes(window.id) && window.remaining === 0
+            )
+            .sort((a, b) => (b.resetAtMs ?? 0) - (a.resetAtMs ?? 0))[0] ?? null)
+        : null;
+    const base = { entry, windows: mapped, primary: mapped[0] ?? null, blockingWindow };
     if (entry.type === 'codex') {
       const quota = store.codexQuota[key];
       return {
@@ -115,21 +124,33 @@ export function buildLedgerAccount(entry: QuotaFileEntry, store: LedgerQuotaStor
           remaining: lane.remaining,
           resetAtMs: lane.anchorMs,
         };
-  return { entry, windows: primary ? [primary] : [], primary, kind: 'standard' };
+  return {
+    entry,
+    windows: primary ? [primary] : [],
+    primary,
+    blockingWindow: null,
+    kind: 'standard',
+  };
 }
 
-export function summarizeLedger(accounts: LedgerAccount[], provider: QuotaProviderType) {
+export function summarizeLedger(
+  accounts: LedgerAccount[],
+  provider: QuotaProviderType,
+  windowId?: string
+) {
   const group = accounts.filter((account) => account.entry.type === provider);
-  const bucketIds = new Set(
-    group.flatMap((account) => (account.primary ? [account.primary.id] : []))
+  const selected = group.map((account) => ({
+    account,
+    window: windowId
+      ? (account.windows.find((window) => window.id === windowId) ?? null)
+      : account.primary,
+  }));
+  const bucketIds = new Set(selected.flatMap(({ window }) => (window ? [window.id] : [])));
+  const known = selected.flatMap(({ window }) =>
+    window?.remaining === null || window === null ? [] : [window.remaining]
   );
-  const known = group.flatMap((account) =>
-    account.primary?.remaining === null || account.primary === null
-      ? []
-      : [account.primary.remaining]
-  );
-  const resets = group.flatMap((account) => {
-    const instant = account.primary?.resetAtMs;
+  const resets = selected.flatMap(({ account, window }) => {
+    const instant = account.blockingWindow?.resetAtMs ?? window?.resetAtMs;
     return typeof instant === 'number' && Number.isFinite(instant) ? [instant] : [];
   });
   return {
@@ -140,7 +161,9 @@ export function summarizeLedger(accounts: LedgerAccount[], provider: QuotaProvid
       group.length > 0 && known.length === group.length && bucketIds.size === 1
         ? known.reduce((sum, value) => sum + value, 0)
         : null,
-    label: group[0]?.primary?.label ?? '',
+    label: selected[0]?.window?.label ?? '',
+    blocked: group.filter((account) => account.blockingWindow !== null).length,
+    windowId,
     resetAtMs: resets.length === group.length && resets.length > 0 ? Math.min(...resets) : null,
   };
 }

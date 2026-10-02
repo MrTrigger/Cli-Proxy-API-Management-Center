@@ -106,3 +106,15 @@
     gap: 18px;
   }
 }
+
+.blocked {
+  color: var(--danger-color, #d94c45);
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+.summaryWindows {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 20px;
+}
