@@ -52,6 +52,9 @@ import { useQuotaActions } from './hooks/useQuotaActions';
 import { useQuotaBatchLoader } from './hooks/useQuotaBatchLoader';
 import { readQuotaUiState, writeQuotaUiState } from './uiState';
 import styles from './QuotaPage.module.scss';
+import { LedgerSummary } from './components/QuotaLedger';
+import { buildLedgerAccount } from './ledger';
+import { getTypeLabel } from '@/features/authFiles/constants';
 
 const TAB_IDS: string[] = ['all', ...QUOTA_TAB_ORDER];
 const SKELETON_CARD_COUNT = 6;
@@ -76,6 +79,8 @@ export function QuotaPage() {
   );
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [view, setView] = useState('ledger');
+  const [showEmails, setShowEmails] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   // 页头 + tabs 的入场级联（标题 → meta → 动作 → tabs，级差 70ms）
   const revealRef = useRevealGroup<HTMLDivElement>();
@@ -178,8 +183,48 @@ export function QuotaPage() {
   );
   // 排序在分页之前：否则「最快恢复」只在当前页内成立。
   const sortedEntries = useMemo(
-    () => sortQuotaEntries(filteredEntries, sortMode, resolveNextRecovery),
-    [filteredEntries, sortMode, resolveNextRecovery]
+    () =>
+      view === 'ledger'
+        ? QUOTA_TAB_ORDER.flatMap((provider) =>
+            sortQuotaEntries(
+              filteredEntries.filter((entry) => entry.type === provider),
+              sortMode,
+              resolveNextRecovery
+            )
+          )
+        : sortQuotaEntries(filteredEntries, sortMode, resolveNextRecovery),
+    [filteredEntries, sortMode, resolveNextRecovery, view]
+  );
+
+  const ledgerAccounts = useMemo(
+    () =>
+      filteredEntries.map((entry) =>
+        buildLedgerAccount(entry, {
+          claudeQuota,
+          codexQuota,
+          antigravityQuota,
+          xaiQuota,
+          kimiQuota,
+          devinQuota,
+          metaQuota,
+        })
+      ),
+    [
+      filteredEntries,
+      claudeQuota,
+      codexQuota,
+      antigravityQuota,
+      xaiQuota,
+      kimiQuota,
+      devinQuota,
+      metaQuota,
+    ]
+  );
+  const ledgerByKey = new Map(
+    ledgerAccounts.map((account) => [
+      `${account.entry.type}:${getQuotaCacheKey(account.entry.file)}`,
+      account,
+    ])
   );
 
   const { pageItems, currentPage, totalPages } = useMemo(
@@ -362,6 +407,25 @@ export function QuotaPage() {
               </button>
             )}
           </div>
+          <Button variant="secondary" size="sm" onClick={() => setShowEmails(!showEmails)}>
+            {t(
+              showEmails
+                ? 'quota_management.ledger_hide_emails'
+                : 'quota_management.ledger_show_emails'
+            )}
+          </Button>
+          <div className={styles.viewControl}>
+            <Select
+              value={view}
+              onChange={setView}
+              size="sm"
+              ariaLabel={t('quota_management.ledger_view')}
+              options={[
+                { value: 'ledger', label: t('quota_management.ledger_view') },
+                { value: 'cards', label: t('quota_management.ledger_cards') },
+              ]}
+            />
+          </div>
           <div className={styles.sort}>
             <Select
               value={sortMode}
@@ -372,6 +436,10 @@ export function QuotaPage() {
             />
           </div>
         </div>
+
+        {!loading && !isEmpty && view === 'ledger' && (
+          <LedgerSummary accounts={ledgerAccounts} resolvedTheme={resolvedTheme} />
+        )}
 
         {error && (
           <div className={styles.errorBanner} role="alert">
@@ -414,19 +482,36 @@ export function QuotaPage() {
             }
           />
         ) : (
-          <div className={styles.grid}>
+          <div className={view === 'ledger' ? styles.ledgerList : styles.grid}>
             {pageItems.map((entry, index) => (
-              <QuotaCard
+              <div
                 key={`${entry.type}:${getQuotaCacheKey(entry.file)}`}
-                entry={entry}
-                quota={getQuota(entry)}
-                resolvedTheme={resolvedTheme}
-                canRefresh={canUseActions && !entry.file.disabled}
-                resetting={resettingQuotaName === getQuotaCacheKey(entry.file)}
-                entranceDelayMs={cardEntranceDelay(index)}
-                onRefresh={() => void refreshQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
-                onReset={() => resetQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
-              />
+                className={view === 'ledger' ? styles.ledgerItem : undefined}
+              >
+                {view === 'ledger' &&
+                  (index === 0 || pageItems[index - 1]?.type !== entry.type) && (
+                    <h2 className={styles.ledgerGroup}>
+                      {getTypeLabel(t, entry.type)} <span>{tabCounts[entry.type]}</span>
+                    </h2>
+                  )}
+                <QuotaCard
+                  key={`${entry.type}:${getQuotaCacheKey(entry.file)}`}
+                  ledgerAccount={
+                    view === 'ledger'
+                      ? ledgerByKey.get(`${entry.type}:${getQuotaCacheKey(entry.file)}`)
+                      : undefined
+                  }
+                  showEmails={showEmails}
+                  entry={entry}
+                  quota={getQuota(entry)}
+                  resolvedTheme={resolvedTheme}
+                  canRefresh={canUseActions && !entry.file.disabled}
+                  resetting={resettingQuotaName === getQuotaCacheKey(entry.file)}
+                  entranceDelayMs={cardEntranceDelay(index)}
+                  onRefresh={() => void refreshQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
+                  onReset={() => resetQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
+                />
+              </div>
             ))}
           </div>
         )}
@@ -460,12 +545,14 @@ export function QuotaPage() {
         )}
 
         {/* 时间线只比较当前页凭证，避免大量凭证一次性生成无界泳道。 */}
-        <QuotaTimeline
-          entries={pageItems}
-          quotaFor={getQuota}
-          displayNameFor={displayNameFor}
-          resolvedTheme={resolvedTheme}
-        />
+        {view === 'cards' && (
+          <QuotaTimeline
+            entries={pageItems}
+            quotaFor={getQuota}
+            displayNameFor={displayNameFor}
+            resolvedTheme={resolvedTheme}
+          />
+        )}
       </section>
     </div>
   );
