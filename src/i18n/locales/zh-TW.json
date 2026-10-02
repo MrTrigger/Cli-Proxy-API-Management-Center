@@ -1607,7 +1607,17 @@
     "weekday_wed": "三",
     "weekday_thu": "四",
     "weekday_fri": "五",
-    "weekday_sat": "六"
+    "weekday_sat": "六",
+    "ledger_summary": "供應商額度總計",
+    "ledger_capacity": "總計 {{capacity}}%",
+    "ledger_weekly": "每週限額",
+    "ledger_unavailable": "額度不可用",
+    "ledger_no_reset": "暫無重置",
+    "ledger_view": "帳本",
+    "ledger_cards": "卡片",
+    "ledger_show_emails": "顯示郵箱",
+    "ledger_hide_emails": "隱藏郵箱",
+    "ledger_resets_available": "{{count}} 次可用"
   },
   "plugin_management": {
     "title": "插件管理",

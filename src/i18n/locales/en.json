@@ -1583,7 +1583,17 @@
     "weekday_wed": "Wed",
     "weekday_thu": "Thu",
     "weekday_fri": "Fri",
-    "weekday_sat": "Sat"
+    "weekday_sat": "Sat",
+    "ledger_summary": "Provider quota totals",
+    "ledger_capacity": "of {{capacity}}%",
+    "ledger_weekly": "Weekly limit",
+    "ledger_unavailable": "Quota unavailable",
+    "ledger_no_reset": "No reset pending",
+    "ledger_view": "Ledger",
+    "ledger_cards": "Cards",
+    "ledger_show_emails": "Show emails",
+    "ledger_hide_emails": "Hide emails",
+    "ledger_resets_available": "{{count}} available"
   },
   "plugin_management": {
     "title": "Plugin Management",

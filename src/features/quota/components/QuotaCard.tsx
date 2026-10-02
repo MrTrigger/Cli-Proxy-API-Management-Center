@@ -25,11 +25,18 @@ import { isQuotaRefreshDisabled, type QuotaFileEntry } from '../logic';
 import { useClaudeResetGrants } from '../providers/claude/ClaudeResetGrants';
 import bodyStyles from './QuotaBody.module.scss';
 import styles from './QuotaCard.module.scss';
+import { getCodexPlanLabel } from '../providers/codex/planLabel';
+import { useNow } from '@/hooks/useNow';
+import { buildResetDisplay } from '@/utils/quota';
+import { LedgerWindows } from './QuotaLedger';
+import { maskLedgerName, type LedgerAccount } from '../ledger';
 
 /** 额度页全页外衣：QuotaBody 模块绑定成类型化契约（缺键在模块初始化即抛）。 */
 const quotaClasses = bindQuotaClasses(bodyStyles, 'QuotaBody.module.scss');
 
 export type QuotaCardProps = {
+  ledgerAccount?: LedgerAccount;
+  showEmails?: boolean;
   entry: QuotaFileEntry;
   quota?: QuotaCardState;
   resolvedTheme: ResolvedTheme;
@@ -52,10 +59,17 @@ export function QuotaCard(props: QuotaCardProps) {
     onRefresh,
     onReset,
   } = props;
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const now = useNow(props.ledgerAccount?.kind === 'codex');
+  const renewal =
+    props.ledgerAccount?.kind === 'codex'
+      ? buildResetDisplay('', props.ledgerAccount.renewalMs, now, i18n.resolvedLanguage)
+      : null;
   const adapter = QUOTA_ADAPTERS[entry.type];
   const file = entry.file;
-  const displayName = getQuotaDisplayName(file);
+  const rawDisplayName = getQuotaDisplayName(file);
+  const displayName =
+    props.ledgerAccount && !props.showEmails ? maskLedgerName(rawDisplayName) : rawDisplayName;
 
   // 挂载时捕获一次延迟：后续 props 变 null 不影响本卡（React 19 禁渲染期读 ref）
   const [mountEntranceDelayMs] = useState<number | null>(entranceDelayMs ?? null);
@@ -88,7 +102,7 @@ export function QuotaCard(props: QuotaCardProps) {
 
   return (
     <article
-      className={`${styles.card} ${mountEntranceDelayMs === null ? '' : styles.cardEnter}`}
+      className={`${styles.card} ${props.ledgerAccount ? styles.ledger : ''} ${mountEntranceDelayMs === null ? '' : styles.cardEnter}`}
       style={entranceStyle}
     >
       <header className={styles.head}>
@@ -110,10 +124,24 @@ export function QuotaCard(props: QuotaCardProps) {
         <span className={styles.fileName} title={displayName}>
           {displayName}
         </span>
+        {props.ledgerAccount &&
+          quota &&
+          'planType' in quota &&
+          typeof quota.planType === 'string' && (
+            <span className={styles.ledgerPlan}>
+              {entry.type === 'codex'
+                ? getCodexPlanLabel(quota.planType, t)
+                : entry.type === 'claude'
+                  ? t(`claude_quota.${quota.planType}`, quota.planType)
+                  : quota.planType}
+              {renewal &&
+                ` · ${t('codex_quota.expires_label')} ${renewal.absolute} · ${renewal.relative}`}
+            </span>
+          )}
       </header>
 
       <div className={styles.body}>
-        {entry.type === 'claude' && status === 'success' && (
+        {!props.ledgerAccount && entry.type === 'claude' && status === 'success' && (
           <>
             <div className={quotaClasses.codexPlan}>
               <span className={quotaClasses.codexPlanItem}>
@@ -152,6 +180,8 @@ export function QuotaCard(props: QuotaCardProps) {
           <div className={styles.errorStrip} role="alert">
             {t(`${adapter.i18nPrefix}.load_failed`, { message: errorMessage })}
           </div>
+        ) : props.ledgerAccount && (entry.type === 'claude' || entry.type === 'codex') ? (
+          <LedgerWindows account={props.ledgerAccount} />
         ) : quota ? (
           <adapter.Body quota={quota} classes={quotaClasses} />
         ) : (
