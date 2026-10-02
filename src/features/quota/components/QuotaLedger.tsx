@@ -16,46 +16,76 @@ export function LedgerSummary({
 }) {
   const { t, i18n } = useTranslation();
   const now = useNow();
-  const summaries = QUOTA_TAB_ORDER.map((provider) => summarizeLedger(accounts, provider)).filter(
-    (summary) => summary.count > 0
-  );
+  const groups = QUOTA_TAB_ORDER.map((provider) => ({
+    provider,
+    summaries:
+      provider === 'claude'
+        ? ['seven-day', 'seven-day-fable'].map((id) => summarizeLedger(accounts, provider, id))
+        : [summarizeLedger(accounts, provider)],
+  })).filter((group) => (group.summaries[0]?.count ?? 0) > 0);
   return (
     <section className={styles.summary} aria-label={t('quota_management.ledger_summary')}>
-      {summaries.map((summary) => {
-        const icon = getAuthFileIcon(summary.provider, resolvedTheme);
-        const reset = buildResetDisplay('', summary.resetAtMs, now, i18n.resolvedLanguage);
-        const label = summary.label || t('quota_management.ledger_weekly');
+      {groups.map(({ provider, summaries }) => {
+        const icon = getAuthFileIcon(provider, resolvedTheme);
         return (
-          <article key={summary.provider} className={styles.tile}>
+          <article key={provider} className={styles.tile}>
             <div className={styles.tileHead}>
               <strong>
-                {icon && <img src={icon} alt="" />} {getTypeLabel(t, summary.provider)}
+                {icon && <img src={icon} alt="" />} {getTypeLabel(t, provider)}
               </strong>
-              <span>{t('quota_management.meta_credentials', { count: summary.count })}</span>
+              <span>{t('quota_management.meta_credentials', { count: summaries[0]?.count })}</span>
             </div>
-            <div className={styles.windowLabel}>{label}</div>
-            <div className={styles.total}>
-              <strong>
-                {summary.remaining === null ? '--' : `${Math.round(summary.remaining)}%`}
-              </strong>
-              <span>
-                {t('quota_management.ledger_capacity', { capacity: summary.count * 100 })}
-              </span>
-            </div>
-            <div className={styles.segments}>
-              {accounts
-                .filter((account) => account.entry.type === summary.provider)
-                .map((account) => (
-                  <LedgerMeter
-                    key={account.entry.file.name}
-                    remaining={account.primary?.remaining ?? null}
-                  />
-                ))}
-            </div>
-            <div className={styles.reset}>
-              {reset
-                ? `${reset.relative} · ${reset.absolute}`
-                : t('quota_management.meta_loaded', { count: summary.loaded })}
+            <div className={styles.summaryWindows}>
+              {summaries.map((summary) => {
+                const reset = buildResetDisplay('', summary.resetAtMs, now, i18n.resolvedLanguage);
+                const label =
+                  summary.windowId === 'seven-day'
+                    ? t('quota_management.ledger_overall')
+                    : summary.windowId === 'seven-day-fable'
+                      ? t('quota_management.ledger_fable')
+                      : summary.label || t('quota_management.ledger_weekly');
+                return (
+                  <div key={summary.windowId ?? 'primary'}>
+                    <div className={styles.windowLabel}>{label}</div>
+                    <div className={styles.total}>
+                      <strong>
+                        {summary.remaining === null ? '--' : `${Math.round(summary.remaining)}%`}
+                      </strong>
+                      <span>
+                        {t('quota_management.ledger_capacity', { capacity: summary.count * 100 })}
+                      </span>
+                    </div>
+                    <div className={styles.segments}>
+                      {accounts
+                        .filter((account) => account.entry.type === provider)
+                        .map((account) => (
+                          <LedgerMeter
+                            key={account.entry.file.name}
+                            remaining={
+                              account.blockingWindow
+                                ? 0
+                                : summary.windowId
+                                  ? (account.windows.find(
+                                      (window) => window.id === summary.windowId
+                                    )?.remaining ?? null)
+                                  : (account.primary?.remaining ?? null)
+                            }
+                          />
+                        ))}
+                    </div>
+                    {summary.blocked > 0 && (
+                      <div className={styles.blocked} role="status">
+                        {t('quota_management.ledger_accounts_blocked', { count: summary.blocked })}
+                      </div>
+                    )}
+                    <div className={styles.reset}>
+                      {reset
+                        ? `${reset.relative} · ${reset.absolute}`
+                        : t('quota_management.meta_loaded', { count: summary.loaded })}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </article>
         );
@@ -89,7 +119,14 @@ export function LedgerWindows({ account }: { account: LedgerAccount }) {
         <span>{t('quota_management.ledger_unavailable')}</span>
       ) : (
         account.windows.map((window, index) => {
-          const reset = buildResetDisplay('', window.resetAtMs, now, i18n.resolvedLanguage);
+          const blocker = account.blockingWindow;
+          const blocked = blocker !== null && blocker.id !== window.id;
+          const reset = buildResetDisplay(
+            '',
+            blocked ? blocker.resetAtMs : window.resetAtMs,
+            now,
+            i18n.resolvedLanguage
+          );
           return (
             <div className={styles.window} key={`${window.label}:${index}`}>
               <div className={styles.windowHead}>
@@ -98,7 +135,12 @@ export function LedgerWindows({ account }: { account: LedgerAccount }) {
                   {window.remaining === null ? '--' : `${Math.round(window.remaining)}%`}
                 </strong>
               </div>
-              <LedgerMeter remaining={window.remaining} />
+              <LedgerMeter remaining={blocked ? 0 : window.remaining} />
+              {blocked && (
+                <div className={styles.blocked} role="status">
+                  {t('quota_management.ledger_blocked_by', { limit: blocker.label })}
+                </div>
+              )}
               <div className={styles.reset}>
                 {reset
                   ? `${reset.relative} · ${reset.absolute}`
