@@ -1586,7 +1586,17 @@
     "weekday_wed": "Ср",
     "weekday_thu": "Чт",
     "weekday_fri": "Пт",
-    "weekday_sat": "Сб"
+    "weekday_sat": "Сб",
+    "ledger_summary": "Квоты провайдеров",
+    "ledger_capacity": "из {{capacity}}%",
+    "ledger_weekly": "Недельный лимит",
+    "ledger_unavailable": "Квота недоступна",
+    "ledger_no_reset": "Сброс не запланирован",
+    "ledger_view": "Реестр",
+    "ledger_cards": "Карточки",
+    "ledger_show_emails": "Показать адреса",
+    "ledger_hide_emails": "Скрыть адреса",
+    "ledger_resets_available": "Доступно: {{count}}"
   },
   "plugin_management": {
     "title": "Управление плагинами",
