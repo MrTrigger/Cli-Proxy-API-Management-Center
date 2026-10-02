@@ -1591,7 +1591,12 @@
     "ledger_cards": "卡片",
     "ledger_show_emails": "显示邮箱",
     "ledger_hide_emails": "隐藏邮箱",
-    "ledger_resets_available": "{{count}} 次可用"
+    "ledger_resets_available": "{{count}} 次可用",
+    "ledger_overall": "总体每周限额",
+    "ledger_fable": "Fable 每周限额",
+    "ledger_accounts_blocked_one": "{{count}} 个账号受共享限额阻止",
+    "ledger_accounts_blocked_other": "{{count}} 个账号受共享限额阻止",
+    "ledger_blocked_by": "受 {{limit}} 限额阻止"
   },
   "plugin_management": {
     "title": "插件管理",

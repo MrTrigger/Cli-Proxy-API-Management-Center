@@ -1593,7 +1593,12 @@
     "ledger_cards": "Cards",
     "ledger_show_emails": "Show emails",
     "ledger_hide_emails": "Hide emails",
-    "ledger_resets_available": "{{count}} available"
+    "ledger_resets_available": "{{count}} available",
+    "ledger_overall": "Overall weekly limit",
+    "ledger_fable": "Fable weekly limit",
+    "ledger_accounts_blocked_one": "{{count}} account blocked by a shared limit",
+    "ledger_accounts_blocked_other": "{{count}} accounts blocked by a shared limit",
+    "ledger_blocked_by": "Blocked by {{limit}}"
   },
   "plugin_management": {
     "title": "Plugin Management",

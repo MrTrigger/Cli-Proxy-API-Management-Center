@@ -114,6 +114,47 @@ describe('Theo quota ledger', () => {
     expect(account.resetExpiries).toEqual([Date.parse('2026-10-10T12:00:00Z')]);
   });
 
+  test('overall exhaustion blocks other Claude windows without changing their reported percentages', () => {
+    const store = emptyStore();
+    store.claudeQuota['a'] = {
+      status: 'success',
+      windows: [window('five-hour', 100), window('seven-day', 0), window('seven-day-fable', 97)],
+    };
+    const account = buildLedgerAccount(entry('a'), store);
+    expect(account.blockingWindow?.id).toBe('seven-day');
+    expect(summarizeLedger([account], 'claude', 'seven-day')).toMatchObject({
+      remaining: 0,
+      blocked: 1,
+    });
+    expect(summarizeLedger([account], 'claude', 'seven-day-fable')).toMatchObject({
+      remaining: 97,
+      blocked: 1,
+    });
+    expect(account.windows.find((item) => item.id === 'five-hour')?.remaining).toBe(100);
+  });
+
+  test('model-specific exhaustion does not block other Claude models', () => {
+    const store = emptyStore();
+    store.claudeQuota['a'] = {
+      status: 'success',
+      windows: [window('five-hour', 100), window('seven-day', 80), window('seven-day-fable', 0)],
+    };
+    const account = buildLedgerAccount(entry('a'), store);
+    expect(account.blockingWindow).toBeNull();
+    expect(summarizeLedger([account], 'claude', 'seven-day')).toMatchObject({
+      remaining: 80,
+      blocked: 0,
+    });
+  });
+
+  test('shared limits unblock after a refreshed quota reports capacity', () => {
+    const store = emptyStore();
+    store.claudeQuota['a'] = { status: 'success', windows: [window('seven-day', 0)] };
+    expect(buildLedgerAccount(entry('a'), store).blockingWindow?.id).toBe('seven-day');
+    store.claudeQuota['a'] = { status: 'success', windows: [window('seven-day', 100)] };
+    expect(buildLedgerAccount(entry('a'), store).blockingWindow).toBeNull();
+  });
+
   test('masks emails without putting them in the hidden label', () => {
     expect(maskLedgerName('magnus@example.com')).toBe('m•••@e•••.com');
     expect(maskLedgerName('claude-magnus@example.com.json')).toBe('claude-m•••@e•••.com.json');
