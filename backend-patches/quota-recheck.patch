@@ -1,0 +1,207 @@
+diff --git a/sdk/cliproxy/auth/conductor_cooldown.go b/sdk/cliproxy/auth/conductor_cooldown.go
+index 2770295..a40e224 100644
+--- a/sdk/cliproxy/auth/conductor_cooldown.go
++++ b/sdk/cliproxy/auth/conductor_cooldown.go
+@@ -8,7 +8,9 @@ import (
+ 	"io"
+ 	"net"
+ 	"net/http"
++	"os"
+ 	"sort"
++	"strconv"
+ 	"strings"
+ 	"sync/atomic"
+ 	"syscall"
+@@ -27,6 +29,32 @@ var quotaCooldownDisabled atomic.Bool
+ 
+ var transientErrorCooldownSeconds atomic.Int64
+ 
++// quotaRecheckEnv names the environment variable that bounds quota cooldowns.
++const quotaRecheckEnv = "CLIPROXY_QUOTA_RECHECK_SECONDS"
++
++// quotaRecheckInterval returns the longest time a quota failure may keep a
++// credential out of rotation, or 0 when unbounded (the upstream behaviour).
++// A usage-limit cooldown is taken from the reset time the provider reported at
++// failure; when the account is reset or upgraded earlier, nothing would clear
++// it. Bounding it makes the next request probe the provider again, so a reset
++// takes effect within one interval and a still-limited account costs at most
++// one rejected request per interval per credential.
++func quotaRecheckInterval() time.Duration {
++	seconds, err := strconv.Atoi(strings.TrimSpace(os.Getenv(quotaRecheckEnv)))
++	if err != nil || seconds <= 0 {
++		return 0
++	}
++	return time.Duration(seconds) * time.Second
++}
++
++// capQuotaCooldown limits a quota cooldown to the recheck interval.
++func capQuotaCooldown(cooldown time.Duration) time.Duration {
++	if limit := quotaRecheckInterval(); limit > 0 && cooldown > limit {
++		return limit
++	}
++	return cooldown
++}
++
+ // SetQuotaCooldownDisabled toggles auth/model cooldown scheduling globally.
+ func SetQuotaCooldownDisabled(disable bool) {
+ 	quotaCooldownDisabled.Store(disable)
+@@ -885,6 +913,7 @@ func (m *Manager) MarkResult(ctx context.Context, result Result) {
+ 									if cooldown < minQuotaCooldownFloor {
+ 										cooldown = minQuotaCooldownFloor
+ 									}
++									cooldown = capQuotaCooldown(cooldown)
+ 									next = now.Add(cooldown).Round(0)
+ 								} else {
+ 									quotaForFailure := state.Quota
+@@ -2277,6 +2306,7 @@ func applyAuthFailureState(auth *Auth, resultErr *Error, retryAfter *time.Durati
+ 					if cooldown < minQuotaCooldownFloor {
+ 						cooldown = minQuotaCooldownFloor
+ 					}
++					cooldown = capQuotaCooldown(cooldown)
+ 					next = now.Add(cooldown).Round(0)
+ 				} else {
+ 					next, auth.Quota.BackoffLevel = quotaCooldownAfterFailure(auth.Quota, now)
+@@ -2320,6 +2350,7 @@ func quotaCooldownAfterFailure(quota QuotaState, now time.Time) (time.Time, int)
+ 		return quota.NextRecoverAt, quota.BackoffLevel
+ 	}
+ 	cooldown, nextLevel := nextQuotaCooldown(quota.BackoffLevel, false)
++	cooldown = capQuotaCooldown(cooldown)
+ 	var next time.Time
+ 	if cooldown > 0 {
+ 		next = now.Add(cooldown).Round(0)
+diff --git a/sdk/cliproxy/auth/quota_recheck_test.go b/sdk/cliproxy/auth/quota_recheck_test.go
+new file mode 100644
+index 0000000..791878c
+--- /dev/null
++++ b/sdk/cliproxy/auth/quota_recheck_test.go
+@@ -0,0 +1,130 @@
++package auth
++
++import (
++	"context"
++	"net/http"
++	"testing"
++	"time"
++
++	"github.com/google/uuid"
++	"github.com/router-for-me/CLIProxyAPI/v8/internal/registry"
++)
++
++const quotaRecheckTestModel = "gpt-6.1-sol"
++
++func newQuotaRecheckAuth(t *testing.T) (*Manager, *Auth) {
++	t.Helper()
++	manager := NewManager(nil, nil, nil)
++	auth := &Auth{
++		ID:         uuid.NewString() + "-codex-recheck",
++		Provider:   "codex",
++		Attributes: map[string]string{"api_key": "test-key"},
++	}
++	reg := registry.GetGlobalRegistry()
++	reg.RegisterClient(auth.ID, "codex", []*registry.ModelInfo{{ID: quotaRecheckTestModel}})
++	t.Cleanup(func() { reg.UnregisterClient(auth.ID) })
++	if _, err := manager.Register(context.Background(), auth); err != nil {
++		t.Fatalf("register auth: %v", err)
++	}
++	return manager, auth
++}
++
++func markUsageLimit(manager *Manager, auth *Auth, retryAfter time.Duration) {
++	manager.MarkResult(context.Background(), Result{
++		AuthID:          auth.ID,
++		Provider:        "codex",
++		Model:           quotaRecheckTestModel,
++		Success:         false,
++		RetryAfter:      &retryAfter,
++		CredentialScope: true,
++		Error:           &Error{HTTPStatus: http.StatusTooManyRequests, Message: "usage_limit_reached"},
++	})
++}
++
++func TestQuotaRecheckUnsetKeepsReportedResetWindow(t *testing.T) {
++	t.Setenv(quotaRecheckEnv, "")
++	manager, auth := newQuotaRecheckAuth(t)
++
++	markUsageLimit(manager, auth, 5*24*time.Hour)
++
++	updated, ok := manager.GetByID(auth.ID)
++	if !ok {
++		t.Fatal("auth not found")
++	}
++	if !updated.Quota.NextRecoverAt.After(time.Now().Add(4 * 24 * time.Hour)) {
++		t.Fatalf("unset recheck must keep the provider-reported window, got %+v", updated.Quota)
++	}
++}
++
++func TestQuotaRecheckBoundsUsageLimitCooldown(t *testing.T) {
++	t.Setenv(quotaRecheckEnv, "60")
++	manager, auth := newQuotaRecheckAuth(t)
++	start := time.Now()
++
++	markUsageLimit(manager, auth, 5*24*time.Hour)
++
++	updated, ok := manager.GetByID(auth.ID)
++	if !ok {
++		t.Fatal("auth not found")
++	}
++	if !updated.Quota.Exceeded {
++		t.Fatalf("quota failure must still start a cooldown, got %+v", updated.Quota)
++	}
++	if limit := start.Add(61 * time.Second); updated.Quota.NextRecoverAt.After(limit) {
++		t.Fatalf("credential cooldown %v exceeds the recheck interval", updated.Quota.NextRecoverAt.Sub(start))
++	}
++	if blocked, _, _ := isAuthBlockedForModel(updated, quotaRecheckTestModel, start.Add(time.Second)); !blocked {
++		t.Fatal("credential must stay out of rotation inside the recheck interval")
++	}
++
++	// Once the interval has passed the next request is allowed to probe the
++	// provider again, so an account that was reset in the meantime recovers.
++	probeTime := start.Add(62 * time.Second)
++	if blocked, reason, next := isAuthBlockedForModel(updated, quotaRecheckTestModel, probeTime); blocked {
++		t.Fatalf("credential still blocked after the recheck interval: reason=%v next=%v", reason, next)
++	}
++
++	manager.MarkResult(context.Background(), Result{
++		AuthID:   auth.ID,
++		Provider: "codex",
++		Model:    quotaRecheckTestModel,
++		Success:  true,
++	})
++	recovered, _ := manager.GetByID(auth.ID)
++	if recovered.Quota.Exceeded && recovered.Quota.NextRecoverAt.After(probeTime) {
++		t.Fatalf("a successful probe must clear the quota state, got %+v", recovered.Quota)
++	}
++}
++
++func TestQuotaRecheckBoundsBackoffLadder(t *testing.T) {
++	t.Setenv(quotaRecheckEnv, "60")
++	now := time.Now()
++
++	// Level 20 saturates the ladder at quotaBackoffMax (30 minutes).
++	next, _ := quotaCooldownAfterFailure(QuotaState{Exceeded: true, BackoffLevel: 20}, now)
++	if got := next.Sub(now); got > 60*time.Second {
++		t.Fatalf("backoff cooldown = %v, want <= 60s", got)
++	}
++
++	t.Setenv(quotaRecheckEnv, "")
++	next, _ = quotaCooldownAfterFailure(QuotaState{Exceeded: true, BackoffLevel: 20}, now)
++	if got := next.Sub(now); got != quotaBackoffMax {
++		t.Fatalf("unset recheck must keep the upstream ladder, got %v want %v", got, quotaBackoffMax)
++	}
++}
++
++func TestCapQuotaCooldownIgnoresInvalidValues(t *testing.T) {
++	for _, setting := range []string{"", "0", "-5", "abc", " "} {
++		t.Setenv(quotaRecheckEnv, setting)
++		if got := capQuotaCooldown(time.Hour); got != time.Hour {
++			t.Fatalf("setting %q capped the cooldown to %v", setting, got)
++		}
++	}
++	t.Setenv(quotaRecheckEnv, "30")
++	if got := capQuotaCooldown(10 * time.Second); got != 10*time.Second {
++		t.Fatalf("a cooldown below the interval must be kept, got %v", got)
++	}
++	if got := capQuotaCooldown(time.Hour); got != 30*time.Second {
++		t.Fatalf("cooldown = %v, want 30s", got)
++	}
++}
