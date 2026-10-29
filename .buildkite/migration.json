@@ -1,0 +1,30 @@
+{
+  "retire": [
+    ".github/workflows/ci.yml",
+    ".github/workflows/triggerlab-image.yml"
+  ],
+  "schedules": [],
+  "events": {
+    "push": [
+      "main",
+      "dev",
+      "feat/**"
+    ],
+    "pull_request": [
+      "opened",
+      "synchronize",
+      "reopened"
+    ],
+    "workflow_dispatch": [
+      "image"
+    ]
+  },
+  "credentials": [
+    "REGISTRY_PASSWORD: only image/publish steps"
+  ],
+  "repository": "MrTrigger/Cli-Proxy-API-Management-Center",
+  "defaultBranch": "main",
+  "sourceRevision": "92154384000172191596797def2513fb22324be2",
+  "hosted": [],
+  "forkPullRequests": false
+}
