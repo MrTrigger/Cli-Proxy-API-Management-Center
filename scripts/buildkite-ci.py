@@ -145,7 +145,8 @@ def pipeline():
     if workflow not in {'all', 'ci', 'image'}:
         raise ValueError('CI_WORKFLOW must be all, ci or image')
     steps = []
-    verify = event == 'pull_request' or (event == 'push' and ENV['CI_BRANCH'] in {'main', 'dev'})
+    verify = (event == 'pull_request' or (event == 'push' and ENV['CI_BRANCH'] in {'main', 'dev'})
+              or (event == 'workflow_dispatch' and workflow in {'all', 'ci'}))
     image = (event == 'push' and (ENV['CI_BRANCH'] == 'main' or ENV['CI_BRANCH'].startswith('feat/')) and
              changed(['src/**', 'tests/**', 'package.json', 'bun.lock', 'Dockerfile', 'backend-patches/**', '.dockerignore', '.github/workflows/triggerlab-image.yml']))
     image = image or (event == 'workflow_dispatch' and workflow in {'all', 'image'})
