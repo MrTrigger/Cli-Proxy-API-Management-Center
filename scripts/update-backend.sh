@@ -8,7 +8,7 @@ upstream=https://github.com/router-for-me/CLIProxyAPI.git
 image=eceasy/cli-proxy-api
 
 tag=${1:-$(git ls-remote --tags --refs --sort=-version:refname "$upstream" 'v8.*' \
-  | head -1 | sed 's#.*refs/tags/##')}
+  | sed -n '1s#.*refs/tags/##p')}
 [[ $tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid release tag: $tag" >&2; exit 1; }
 
 # The peeled entry (^{}) of an annotated tag is listed last.
