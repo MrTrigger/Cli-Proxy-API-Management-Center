@@ -171,11 +171,9 @@ Use a trusted device or dedicated browser profile. Enable remote management only
 
 ## Triggerlab image
 
-The Dockerfile builds the console and backend v8.0.10 from upstream commit
-`6fecc6e5567912661654a4eaf9b8f5436facd1c2`. The backend patch in
-`backend-patches/utls-ipv4.patch` adds `CLIPROXY_FORCE_IPV4=1` for browser TLS
-connections on IPv4-only clusters. Without that environment setting, upstream
-address-family behavior is preserved. The image build applies the patch, runs
-the transport tests and compiles the backend. Revalidate the patch when changing
-the upstream backend commit. Provider credentials and Tailscale state stay on
-the deployment’s existing volumes.
+The Dockerfile builds the console and the upstream CLIProxyAPI backend release
+pinned there, with the patches in `backend-patches/` (see `FORK.md`). The
+backend's Claude client identity, and therefore which new Claude models it can
+serve, comes from that release. Update it with `scripts/update-backend.sh
+[vX.Y.Z]`. Provider credentials and Tailscale state stay on the deployment’s
+existing volumes.

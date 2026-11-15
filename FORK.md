@@ -1,6 +1,7 @@
 # Triggerlab console fork
 
-Based on upstream CPAMC v1.25.2 with CLIProxyAPI v8.0.10. The first target is
+Based on upstream CPAMC v1.25.2 with the CLIProxyAPI release pinned in the
+Dockerfile. The first target is
 Theo's quota-ledger screenshots from https://www.youtube.com/watch?v=D8PikZ1KhUo.
 
 Ledger is the default quota view. It groups credentials by provider and shows
@@ -47,10 +48,24 @@ unchanged unless it is set.
   429 backoff ladder (otherwise up to 30 minutes). Unset, 0 or invalid keeps the
   upstream behaviour. The image sets it to 60.
 
-With the cap on, six upstream tests fail because they assert that a long
-reported window is honoured (`claude_ratelimit_cooldown_test.go`,
-`conductor_cooldown_monotonic_test.go`, `conductor_stream_quota_test.go`,
-`conductor_subsecond_cooldown_test.go`). That is the intended change; the image
-build runs only the new `QuotaRecheck` tests plus the existing `helps` package.
-After changing a patch, check `git apply` on a fresh checkout of the pinned
-commit with every patch in order, then `go test ./sdk/cliproxy/auth`.
+With the cap on, upstream `sdk/cliproxy/auth` tests that assert a long reported
+window is honoured, or which window governs a deadline, fail (19 on v8.0.73).
+That is the intended change; unset, the package passes. The image build runs
+only the new `QuotaRecheck` tests plus the existing `helps` package.
+
+## Updating the backend
+
+The backend release sets the Claude Code version the proxy presents to
+Anthropic (for example `claude-cli/2.1.321` in v8.0.73). A new Claude model that
+needs a newer Claude Code fails through the proxy with `400 ... version X or
+newer is required` until the backend is updated, whatever the client's version.
+
+Run `scripts/update-backend.sh` (latest v8 release) or pass a tag. It resolves
+the release commit and base-image digest, checks that every patch applies in
+order, runs the patch tests when Go is installed, and only then rewrites the
+Dockerfile pins. If a patch no longer applies, commit the patches onto the old
+pinned commit, cherry-pick them onto the new tag, resolve conflicts, and
+regenerate each file with `git diff`. A merge to main publishes
+`registry.wallintech.eu/mrtrigger/cli-proxy-api:sha-<commit>`; Triggerlab
+deploys it by pinning that tag and digest in
+`kubernetes/apps/ai/cli-proxy-api/app/helmrelease.yaml`.
