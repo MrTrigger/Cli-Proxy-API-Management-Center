@@ -1,8 +1,8 @@
-diff --git i/internal/runtime/executor/helps/utls_client.go w/internal/runtime/executor/helps/utls_client.go
-index f832748..829ac38 100644
---- i/internal/runtime/executor/helps/utls_client.go
-+++ w/internal/runtime/executor/helps/utls_client.go
-@@ -7,6 +7,7 @@ import (
+diff --git a/internal/runtime/executor/helps/utls_client.go b/internal/runtime/executor/helps/utls_client.go
+index 42cf15b6..8bdfdf33 100644
+--- a/internal/runtime/executor/helps/utls_client.go
++++ b/internal/runtime/executor/helps/utls_client.go
+@@ -8,6 +8,7 @@ import (
  	"io"
  	"net"
  	"net/http"
@@ -10,7 +10,7 @@ index f832748..829ac38 100644
  	"strings"
  	"sync"
  	"time"
-@@ -67,12 +68,19 @@ func newUtlsRoundTripper(proxyURL string) *utlsRoundTripper {
+@@ -69,12 +70,19 @@ func newUtlsRoundTripper(proxyURL string) *utlsRoundTripper {
  	return &utlsRoundTripper{dialer: dialer}
  }
  
@@ -31,18 +31,18 @@ index f832748..829ac38 100644
  	if errDial != nil {
  		return nil, fmt.Errorf("utls: dial upstream: %w", errDial)
  	}
-@@ -334,6 +342,7 @@ func newClaudeCodeRoundTripper(proxyURL string) http.RoundTripper {
- 	transport := &http.Transport{
- 		ForceAttemptHTTP2: false,
+@@ -384,6 +392,7 @@ func newClaudeCodeRoundTripperForDialerAndRoots(dialer proxy.Dialer, roots *x509
+ 		ForceAttemptHTTP2:   false,
+ 		MaxIdleConnsPerHost: -1,
  		DialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 +			network = utlsNetwork(network)
  			var (
  				conn net.Conn
  				err  error
-diff --git i/internal/runtime/executor/helps/utls_client_test.go w/internal/runtime/executor/helps/utls_client_test.go
-index 1b85b0a..8eafa31 100644
---- i/internal/runtime/executor/helps/utls_client_test.go
-+++ w/internal/runtime/executor/helps/utls_client_test.go
+diff --git a/internal/runtime/executor/helps/utls_client_test.go b/internal/runtime/executor/helps/utls_client_test.go
+index 1b85b0a4..8eafa31d 100644
+--- a/internal/runtime/executor/helps/utls_client_test.go
++++ b/internal/runtime/executor/helps/utls_client_test.go
 @@ -639,3 +639,26 @@ func summarizeClaudeCodeClientHelloSpec(t *testing.T, spec *tls.ClientHelloSpec)
  	summary.JA3MD5 = hex.EncodeToString(digest[:])
  	return summary

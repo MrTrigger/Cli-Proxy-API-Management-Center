@@ -1,18 +1,19 @@
 diff --git a/sdk/cliproxy/auth/conductor_cooldown.go b/sdk/cliproxy/auth/conductor_cooldown.go
-index 2770295..a40e224 100644
+index f3b5dcb2..31af7eb5 100644
 --- a/sdk/cliproxy/auth/conductor_cooldown.go
 +++ b/sdk/cliproxy/auth/conductor_cooldown.go
-@@ -8,7 +8,9 @@ import (
- 	"io"
+@@ -9,8 +9,10 @@ import (
+ 	"maps"
  	"net"
  	"net/http"
 +	"os"
+ 	"regexp"
  	"sort"
 +	"strconv"
  	"strings"
  	"sync/atomic"
  	"syscall"
-@@ -27,6 +29,32 @@ var quotaCooldownDisabled atomic.Bool
+@@ -30,6 +32,32 @@ var quotaCooldownDisabled atomic.Bool
  
  var transientErrorCooldownSeconds atomic.Int64
  
@@ -45,7 +46,7 @@ index 2770295..a40e224 100644
  // SetQuotaCooldownDisabled toggles auth/model cooldown scheduling globally.
  func SetQuotaCooldownDisabled(disable bool) {
  	quotaCooldownDisabled.Store(disable)
-@@ -885,6 +913,7 @@ func (m *Manager) MarkResult(ctx context.Context, result Result) {
+@@ -1774,6 +1802,7 @@ func (m *Manager) MarkResult(ctx context.Context, result Result) {
  									if cooldown < minQuotaCooldownFloor {
  										cooldown = minQuotaCooldownFloor
  									}
@@ -53,15 +54,15 @@ index 2770295..a40e224 100644
  									next = now.Add(cooldown).Round(0)
  								} else {
  									quotaForFailure := state.Quota
-@@ -2277,6 +2306,7 @@ func applyAuthFailureState(auth *Auth, resultErr *Error, retryAfter *time.Durati
+@@ -4234,6 +4263,7 @@ func applyAuthFailureState(auth *Auth, resultErr *Error, retryAfter *time.Durati
  					if cooldown < minQuotaCooldownFloor {
  						cooldown = minQuotaCooldownFloor
  					}
 +					cooldown = capQuotaCooldown(cooldown)
  					next = now.Add(cooldown).Round(0)
- 				} else {
- 					next, auth.Quota.BackoffLevel = quotaCooldownAfterFailure(auth.Quota, now)
-@@ -2320,6 +2350,7 @@ func quotaCooldownAfterFailure(quota QuotaState, now time.Time) (time.Time, int)
+ 					if isForceAuth {
+ 						ownAuthForceDeadline = next
+@@ -4345,6 +4375,7 @@ func quotaCooldownAfterFailure(quota QuotaState, now time.Time) (time.Time, int)
  		return quota.NextRecoverAt, quota.BackoffLevel
  	}
  	cooldown, nextLevel := nextQuotaCooldown(quota.BackoffLevel, false)
@@ -71,7 +72,7 @@ index 2770295..a40e224 100644
  		next = now.Add(cooldown).Round(0)
 diff --git a/sdk/cliproxy/auth/quota_recheck_test.go b/sdk/cliproxy/auth/quota_recheck_test.go
 new file mode 100644
-index 0000000..791878c
+index 00000000..791878c4
 --- /dev/null
 +++ b/sdk/cliproxy/auth/quota_recheck_test.go
 @@ -0,0 +1,130 @@
