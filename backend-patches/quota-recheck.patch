@@ -1,13 +1,12 @@
 diff --git a/sdk/cliproxy/auth/conductor_cooldown.go b/sdk/cliproxy/auth/conductor_cooldown.go
-index f3b5dcb2..31af7eb5 100644
+index a6d911ac..103937a6 100644
 --- a/sdk/cliproxy/auth/conductor_cooldown.go
 +++ b/sdk/cliproxy/auth/conductor_cooldown.go
-@@ -9,8 +9,10 @@ import (
+@@ -8,7 +8,9 @@ import (
  	"maps"
  	"net"
  	"net/http"
 +	"os"
- 	"regexp"
  	"sort"
 +	"strconv"
  	"strings"
@@ -46,7 +45,7 @@ index f3b5dcb2..31af7eb5 100644
  // SetQuotaCooldownDisabled toggles auth/model cooldown scheduling globally.
  func SetQuotaCooldownDisabled(disable bool) {
  	quotaCooldownDisabled.Store(disable)
-@@ -1774,6 +1802,7 @@ func (m *Manager) MarkResult(ctx context.Context, result Result) {
+@@ -1839,6 +1867,7 @@ func (m *Manager) MarkResult(ctx context.Context, result Result) {
  									if cooldown < minQuotaCooldownFloor {
  										cooldown = minQuotaCooldownFloor
  									}
@@ -54,7 +53,7 @@ index f3b5dcb2..31af7eb5 100644
  									next = now.Add(cooldown).Round(0)
  								} else {
  									quotaForFailure := state.Quota
-@@ -4234,6 +4263,7 @@ func applyAuthFailureState(auth *Auth, resultErr *Error, retryAfter *time.Durati
+@@ -4334,6 +4363,7 @@ func applyAuthFailureState(auth *Auth, resultErr *Error, retryAfter *time.Durati
  					if cooldown < minQuotaCooldownFloor {
  						cooldown = minQuotaCooldownFloor
  					}
@@ -62,7 +61,7 @@ index f3b5dcb2..31af7eb5 100644
  					next = now.Add(cooldown).Round(0)
  					if isForceAuth {
  						ownAuthForceDeadline = next
-@@ -4345,6 +4375,7 @@ func quotaCooldownAfterFailure(quota QuotaState, now time.Time) (time.Time, int)
+@@ -4462,6 +4492,7 @@ func quotaCooldownAfterFailure(quota QuotaState, now time.Time) (time.Time, int)
  		return quota.NextRecoverAt, quota.BackoffLevel
  	}
  	cooldown, nextLevel := nextQuotaCooldown(quota.BackoffLevel, false)
