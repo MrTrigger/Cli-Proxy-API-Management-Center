@@ -1609,7 +1609,7 @@
     "weekday_fri": "五",
     "weekday_sat": "六",
     "ledger_summary": "供應商額度總計",
-    "ledger_capacity": "總計 {{capacity}}%",
+    "ledger_capacity": "占方案總額度",
     "ledger_weekly": "每週限額",
     "ledger_unavailable": "額度不可用",
     "ledger_no_reset": "暫無重置",

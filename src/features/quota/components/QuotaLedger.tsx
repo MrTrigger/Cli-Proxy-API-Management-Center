@@ -52,15 +52,16 @@ export function LedgerSummary({
                         {summary.remaining === null ? '--' : `${Math.round(summary.remaining)}%`}
                       </strong>
                       <span>
-                        {t('quota_management.ledger_capacity', { capacity: summary.count * 100 })}
+                        {t('quota_management.ledger_capacity')}
                       </span>
                     </div>
                     <div className={styles.segments}>
                       {accounts
                         .filter((account) => account.entry.type === provider)
-                        .map((account) => (
+                        .map((account, index) => (
                           <LedgerMeter
                             key={account.entry.file.name}
+                            weight={summary.weights?.[index] ?? 1}
                             remaining={
                               account.blockingWindow
                                 ? 0
@@ -94,7 +95,13 @@ export function LedgerSummary({
   );
 }
 
-export function LedgerMeter({ remaining }: { remaining: number | null }) {
+export function LedgerMeter({
+  remaining,
+  weight = 1,
+}: {
+  remaining: number | null;
+  weight?: number;
+}) {
   const fill =
     remaining === null
       ? ''
@@ -104,7 +111,7 @@ export function LedgerMeter({ remaining }: { remaining: number | null }) {
           ? styles.medium
           : styles.low;
   return (
-    <div className={styles.meter}>
+    <div className={styles.meter} style={{ flexGrow: weight }}>
       <div className={fill} style={{ width: `${remaining ?? 0}%` }} />
     </div>
   );

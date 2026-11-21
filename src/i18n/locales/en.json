@@ -1585,7 +1585,7 @@
     "weekday_fri": "Fri",
     "weekday_sat": "Sat",
     "ledger_summary": "Provider quota totals",
-    "ledger_capacity": "of {{capacity}}%",
+    "ledger_capacity": "of total plan capacity",
     "ledger_weekly": "Weekly limit",
     "ledger_unavailable": "Quota unavailable",
     "ledger_no_reset": "No reset pending",

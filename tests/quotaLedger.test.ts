@@ -31,7 +31,7 @@ const window = (id: string, remaining: number | null) => ({
 });
 
 describe('Theo quota ledger', () => {
-  test('sums five account percentages to the screenshot total without averaging', () => {
+  test('averages accounts on the same plan as a share of their combined capacity', () => {
     const store = emptyStore();
     const accounts = [58, 100, 100, 51, 100].map((remaining, index) => {
       const name = `claude-${index}.json`;
@@ -48,7 +48,7 @@ describe('Theo quota ledger', () => {
     expect(summarizeLedger(accounts, 'claude')).toMatchObject({
       count: 5,
       loaded: 5,
-      remaining: 409,
+      remaining: 81.8,
     });
     expect(accounts[0]?.windows[0]?.label).toBe('seven-day-fable');
   });
@@ -72,6 +72,66 @@ describe('Theo quota ledger', () => {
     store.claudeQuota['b'] = { status: 'success', windows: [window('seven-day', 80)] };
     const accounts = ['a', 'b'].map((name) => buildLedgerAccount(entry(name), store));
     expect(summarizeLedger(accounts, 'claude').remaining).toBeNull();
+  });
+
+  test('weights a nearly spent Max 20x account above a fresh Pro account', () => {
+    const store = emptyStore();
+    store.claudeQuota['max'] = {
+      status: 'success',
+      planType: 'plan_max20',
+      windows: [window('seven-day', 44)],
+    };
+    store.claudeQuota['pro'] = {
+      status: 'success',
+      planType: 'plan_pro',
+      windows: [window('seven-day', 78)],
+    };
+    const accounts = ['max', 'pro'].map((name) => buildLedgerAccount(entry(name), store));
+    const summary = summarizeLedger(accounts, 'claude', 'seven-day');
+    expect(summary.weights).toEqual([20, 1]);
+    expect(summary.remaining).toBeCloseTo((20 * 44 + 78) / 21, 5);
+  });
+
+  test('does not guess a total when mixed plans include an unknown size', () => {
+    const store = emptyStore();
+    store.claudeQuota['max'] = {
+      status: 'success',
+      planType: 'plan_max',
+      windows: [window('seven-day', 44)],
+    };
+    store.claudeQuota['pro'] = {
+      status: 'success',
+      planType: 'plan_pro',
+      windows: [window('seven-day', 78)],
+    };
+    const accounts = ['max', 'pro'].map((name) => buildLedgerAccount(entry(name), store));
+    expect(summarizeLedger(accounts, 'claude', 'seven-day')).toMatchObject({
+      remaining: null,
+      weights: null,
+    });
+  });
+
+  test('does not treat two Max accounts of unknown size as one plan', () => {
+    const store = emptyStore();
+    const accounts = ['a', 'b'].map((name) => {
+      store.claudeQuota[name] = {
+        status: 'success',
+        planType: 'plan_max',
+        windows: [window('seven-day', 50)],
+      };
+      return buildLedgerAccount(entry(name), store);
+    });
+    expect(summarizeLedger(accounts, 'claude', 'seven-day').remaining).toBeNull();
+  });
+
+  test('weights Codex Pro 200 as 20 Plus plans', () => {
+    const store = emptyStore();
+    const codex = (name: string, planType: string, remaining: number) => {
+      store.codexQuota[name] = { status: 'success', planType, windows: [window('weekly', remaining)] };
+      return buildLedgerAccount({ type: 'codex', file: { name, provider: 'codex' } }, store);
+    };
+    const accounts = [codex('pro', 'pro', 0), codex('plus', 'plus', 100)];
+    expect(summarizeLedger(accounts, 'codex').remaining).toBeCloseTo(100 / 21, 5);
   });
 
   test('known zero is shown even without an active reset', () => {
