@@ -111,6 +111,19 @@ describe('Theo quota ledger', () => {
     });
   });
 
+  test('does not treat two Max accounts of unknown size as one plan', () => {
+    const store = emptyStore();
+    const accounts = ['a', 'b'].map((name) => {
+      store.claudeQuota[name] = {
+        status: 'success',
+        planType: 'plan_max',
+        windows: [window('seven-day', 50)],
+      };
+      return buildLedgerAccount(entry(name), store);
+    });
+    expect(summarizeLedger(accounts, 'claude', 'seven-day').remaining).toBeNull();
+  });
+
   test('weights Codex Pro 200 as 20 Plus plans', () => {
     const store = emptyStore();
     const codex = (name: string, planType: string, remaining: number) => {

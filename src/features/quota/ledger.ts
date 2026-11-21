@@ -54,8 +54,9 @@ const PLAN_WEIGHTS: Partial<Record<QuotaProviderType, Record<string, number>>> =
 };
 
 export function resolvePlanWeight(provider: QuotaProviderType, plan: string | null) {
-  if (plan === null) return null;
-  return PLAN_WEIGHTS[provider]?.[plan.trim().toLowerCase()] ?? null;
+  const weights = PLAN_WEIGHTS[provider];
+  const key = plan?.trim().toLowerCase();
+  return weights && key && Object.prototype.hasOwnProperty.call(weights, key) ? weights[key] : null;
 }
 
 const remainingPercent = (used: number | null) =>
@@ -166,13 +167,14 @@ export function buildLedgerAccount(entry: QuotaFileEntry, store: LedgerQuotaStor
 
 /**
  * Weights for summing accounts of different plan sizes. Accounts on the same plan, or a
- * provider without plan data, weigh the same. Mixed plans need every plan's size; otherwise
- * the result is null rather than a guess.
+ * provider without plan weights, weigh the same. Mixed plans need every plan's size; otherwise
+ * the result is null rather than a guess. A Max plan without its 5x/20x tier is not one size.
  */
 export function resolveLedgerWeights(group: LedgerAccount[]): number[] | null {
   const weights = group.map((account) => account.planWeight);
   if (weights.every((weight): weight is number => weight !== null)) return weights;
   const plans = new Set(group.map((account) => account.plan));
+  if (group.length > 1 && plans.has('plan_max')) return null;
   return plans.size <= 1 ? group.map(() => 1) : null;
 }
 
@@ -209,7 +211,7 @@ export function summarizeLedger(
       bucketIds.size === 1 &&
       weights !== null &&
       totalWeight > 0
-        ? known.reduce((sum, value, index) => sum + value * (weights[index] ?? 0), 0) /
+        ? weights.reduce((sum, weight, index) => sum + weight * (known[index] ?? 0), 0) /
           totalWeight
         : null,
     weights,

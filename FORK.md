@@ -10,7 +10,7 @@ meter sized by each account's plan. Accounts are weighted by plan size: Claude
 Pro 1, Max 5x 5 and Max 20x 20 (from the profile's `rate_limit_tier`); Codex
 Plus 1, Pro 100 5 and Pro 200 20 (OpenAI's announced multipliers). A nearly
 spent Max 20x at 44% with a fresh Pro at 78% totals 46%, not 122%. Accounts on
-the same plan, or providers without plan data, weigh the same. Mixed plans
+the same plan weigh the same, as do accounts of other providers. Mixed plans
 with an unknown size, and unloaded, unknown or incompatible quota buckets,
 show no total instead of a guess. It does not measure tokens.
 
