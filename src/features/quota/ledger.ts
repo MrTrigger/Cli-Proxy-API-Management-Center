@@ -28,6 +28,9 @@ type LedgerAccountBase = {
   windows: LedgerWindow[];
   primary: LedgerWindow | null;
   blockingWindow: LedgerWindow | null;
+  plan: string | null;
+  /** Plan capacity relative to the provider's base plan, or null when unknown. */
+  planWeight: number | null;
 };
 
 export type LedgerAccount = LedgerAccountBase &
@@ -42,11 +45,32 @@ export type LedgerAccount = LedgerAccountBase &
     | { kind: 'standard' }
   );
 
+// Relative plan sizes. Claude's come from the profile's rate-limit tier (Max 5x and 20x
+// of Pro). Codex uses OpenAI's announced multipliers over Plus: Pro 100 is 5x and Pro 200
+// is 20x. Plans without a published multiplier (Free, Go, Team, Business) stay unknown.
+const PLAN_WEIGHTS: Partial<Record<QuotaProviderType, Record<string, number>>> = {
+  claude: { plan_pro: 1, plan_max5: 5, plan_max20: 20 },
+  codex: { plus: 1, prolite: 5, 'pro-lite': 5, pro_lite: 5, pro: 20 },
+};
+
+export function resolvePlanWeight(provider: QuotaProviderType, plan: string | null) {
+  if (plan === null) return null;
+  return PLAN_WEIGHTS[provider]?.[plan.trim().toLowerCase()] ?? null;
+}
+
 const remainingPercent = (used: number | null) =>
   used !== null && Number.isFinite(used) ? Math.max(0, Math.min(100, 100 - used)) : null;
 
 export function buildLedgerAccount(entry: QuotaFileEntry, store: LedgerQuotaStore): LedgerAccount {
   const key = getQuotaCacheKey(entry.file);
+  const planQuota =
+    entry.type === 'claude'
+      ? store.claudeQuota[key]
+      : entry.type === 'codex'
+        ? store.codexQuota[key]
+        : undefined;
+  const plan = planQuota?.status === 'success' ? (planQuota.planType ?? null) : null;
+  const planInfo = { plan, planWeight: resolvePlanWeight(entry.type, plan) };
   let windows: ClaudeQuotaWindow[] | null = null;
   if (entry.type === 'claude') {
     const quota = store.claudeQuota[key];
@@ -81,7 +105,13 @@ export function buildLedgerAccount(entry: QuotaFileEntry, store: LedgerQuotaStor
             )
             .sort((a, b) => (b.resetAtMs ?? 0) - (a.resetAtMs ?? 0))[0] ?? null)
         : null;
-    const base = { entry, windows: mapped, primary: mapped[0] ?? null, blockingWindow };
+    const base = {
+      entry,
+      windows: mapped,
+      primary: mapped[0] ?? null,
+      blockingWindow,
+      ...planInfo,
+    };
     if (entry.type === 'codex') {
       const quota = store.codexQuota[key];
       return {
@@ -129,8 +159,21 @@ export function buildLedgerAccount(entry: QuotaFileEntry, store: LedgerQuotaStor
     windows: primary ? [primary] : [],
     primary,
     blockingWindow: null,
+    ...planInfo,
     kind: 'standard',
   };
+}
+
+/**
+ * Weights for summing accounts of different plan sizes. Accounts on the same plan, or a
+ * provider without plan data, weigh the same. Mixed plans need every plan's size; otherwise
+ * the result is null rather than a guess.
+ */
+export function resolveLedgerWeights(group: LedgerAccount[]): number[] | null {
+  const weights = group.map((account) => account.planWeight);
+  if (weights.every((weight): weight is number => weight !== null)) return weights;
+  const plans = new Set(group.map((account) => account.plan));
+  return plans.size <= 1 ? group.map(() => 1) : null;
 }
 
 export function summarizeLedger(
@@ -149,6 +192,8 @@ export function summarizeLedger(
   const known = selected.flatMap(({ window }) =>
     window?.remaining === null || window === null ? [] : [window.remaining]
   );
+  const weights = resolveLedgerWeights(group);
+  const totalWeight = weights?.reduce((sum, weight) => sum + weight, 0) ?? 0;
   const resets = selected.flatMap(({ account, window }) => {
     const instant = account.blockingWindow?.resetAtMs ?? window?.resetAtMs;
     return typeof instant === 'number' && Number.isFinite(instant) ? [instant] : [];
@@ -157,10 +202,17 @@ export function summarizeLedger(
     provider,
     count: group.length,
     loaded: known.length,
+    // Share of the provider's combined plan capacity that is left, from 0 to 100.
     remaining:
-      group.length > 0 && known.length === group.length && bucketIds.size === 1
-        ? known.reduce((sum, value) => sum + value, 0)
+      group.length > 0 &&
+      known.length === group.length &&
+      bucketIds.size === 1 &&
+      weights !== null &&
+      totalWeight > 0
+        ? known.reduce((sum, value, index) => sum + value * (weights[index] ?? 0), 0) /
+          totalWeight
         : null,
+    weights,
     label: selected[0]?.window?.label ?? '',
     blocked: group.filter((account) => account.blockingWindow !== null).length,
     windowId,

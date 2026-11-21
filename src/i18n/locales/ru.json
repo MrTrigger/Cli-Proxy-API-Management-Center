@@ -1588,7 +1588,7 @@
     "weekday_fri": "Пт",
     "weekday_sat": "Сб",
     "ledger_summary": "Квоты провайдеров",
-    "ledger_capacity": "из {{capacity}}%",
+    "ledger_capacity": "от общей ёмкости тарифов",
     "ledger_weekly": "Недельный лимит",
     "ledger_unavailable": "Квота недоступна",
     "ledger_no_reset": "Сброс не запланирован",

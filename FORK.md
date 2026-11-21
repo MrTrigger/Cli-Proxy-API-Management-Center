@@ -5,10 +5,14 @@ Dockerfile. The first target is
 Theo's quota-ledger screenshots from https://www.youtube.com/watch?v=D8PikZ1KhUo.
 
 Ledger is the default quota view. It groups credentials by provider and shows
-aggregate percentages per provider, with a segmented meter for individual
-accounts. A total of 409% across five accounts means 409% of 500% normalized
-account capacity. It does not measure tokens or assume equal subscription sizes.
-Unloaded, unknown, or incompatible quota buckets never silently count as zero.
+how much of the provider's combined plan capacity is left, with a segmented
+meter sized by each account's plan. Accounts are weighted by plan size: Claude
+Pro 1, Max 5x 5 and Max 20x 20 (from the profile's `rate_limit_tier`); Codex
+Plus 1, Pro 100 5 and Pro 200 20 (OpenAI's announced multipliers). A nearly
+spent Max 20x at 44% with a fresh Pro at 78% totals 46%, not 122%. Accounts on
+the same plan, or providers without plan data, weigh the same. Mixed plans
+with an unknown size, and unloaded, unknown or incompatible quota buckets,
+show no total instead of a guess. It does not measure tokens.
 
 Claude rows put the reported Fable weekly bucket first when available, followed
 by the account's other windows. Codex rows keep their own reported windows,
