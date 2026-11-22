@@ -1598,6 +1598,8 @@
     "ledger_fable": "Fable weekly limit",
     "ledger_accounts_blocked_one": "{{count}} account blocked by a shared limit",
     "ledger_accounts_blocked_other": "{{count}} accounts blocked by a shared limit",
+    "ledger_accounts_uncounted_one": "{{count}} account not counted: plan size unknown",
+    "ledger_accounts_uncounted_other": "{{count}} accounts not counted: plan size unknown",
     "ledger_blocked_by": "Blocked by {{limit}}"
   },
   "plugin_management": {

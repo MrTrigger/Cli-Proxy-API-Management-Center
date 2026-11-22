@@ -92,7 +92,7 @@ describe('Theo quota ledger', () => {
     expect(summary.remaining).toBeCloseTo((20 * 44 + 78) / 21, 5);
   });
 
-  test('does not guess a total when mixed plans include an unknown size', () => {
+  test('leaves an account of unknown plan size out of a mixed-plan total', () => {
     const store = emptyStore();
     store.claudeQuota['max'] = {
       status: 'success',
@@ -106,8 +106,83 @@ describe('Theo quota ledger', () => {
     };
     const accounts = ['max', 'pro'].map((name) => buildLedgerAccount(entry(name), store));
     expect(summarizeLedger(accounts, 'claude', 'seven-day')).toMatchObject({
-      remaining: null,
-      weights: null,
+      remaining: 78,
+      weights: [null, 1],
+      uncounted: 1,
+      loaded: 2,
+    });
+  });
+
+  test('totals Codex Pro 200 alone when a Free account has a monthly limit of unknown size', () => {
+    const store = emptyStore();
+    store.codexQuota['pro'] = {
+      status: 'success',
+      planType: 'pro',
+      windows: [{ ...window('weekly', 91), resetAtMs: 2_000 }],
+    };
+    store.codexQuota['free'] = {
+      status: 'success',
+      planType: 'free',
+      windows: [{ ...window('monthly', 100), resetAtMs: 1_000 }],
+    };
+    const accounts = ['pro', 'free'].map((name) =>
+      buildLedgerAccount({ type: 'codex', file: { name, provider: 'codex' } }, store)
+    );
+    expect(summarizeLedger(accounts, 'codex')).toMatchObject({
+      remaining: 91,
+      uncounted: 1,
+      resetAtMs: 2_000,
+    });
+  });
+
+  test('waits for every Codex account before totalling mixed plans', () => {
+    const store = emptyStore();
+    store.codexQuota['pro'] = { status: 'success', planType: 'pro', windows: [window('weekly', 91)] };
+    store.codexQuota['other'] = { status: 'loading', windows: [] };
+    const accounts = ['pro', 'other'].map((name) =>
+      buildLedgerAccount({ type: 'codex', file: { name, provider: 'codex' } }, store)
+    );
+    expect(summarizeLedger(accounts, 'codex')).toMatchObject({ remaining: null, uncounted: 0 });
+  });
+
+  test('a full Antigravity bucket without a reset time counts as 100%', () => {
+    const store = emptyStore();
+    const bucket = (window: string, remainingFraction: number, periodHours: number) => ({
+      id: window,
+      label: window,
+      window,
+      remainingFraction,
+      resetAtMs: remainingFraction === 1 ? null : 5_000,
+      periodHours,
+    });
+    store.antigravityQuota['a'] = {
+      status: 'success',
+      groups: [
+        {
+          id: 'claude-gpt',
+          label: 'Claude and GPT models',
+          buckets: [bucket('five_hour', 1, 5), bucket('weekly', 1, 168)],
+        },
+      ],
+    };
+    store.antigravityQuota['b'] = {
+      status: 'success',
+      groups: [
+        {
+          id: 'claude-gpt',
+          label: 'Claude and GPT models',
+          buckets: [bucket('five_hour', 1, 5), bucket('weekly', 0.4, 168)],
+        },
+      ],
+    };
+    const accounts = ['a', 'b'].map((name) =>
+      buildLedgerAccount({ type: 'antigravity', file: { name, provider: 'antigravity' } }, store)
+    );
+    expect(accounts[0]?.primary?.remaining).toBe(100);
+    expect(summarizeLedger(accounts, 'antigravity')).toMatchObject({
+      loaded: 2,
+      remaining: 70,
+      uncounted: 0,
     });
   });
 

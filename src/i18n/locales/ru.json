@@ -1601,6 +1601,8 @@
     "ledger_fable": "Недельный лимит Fable",
     "ledger_accounts_blocked_one": "{{count}} аккаунт заблокирован общим лимитом",
     "ledger_accounts_blocked_other": "{{count}} аккаунтов заблокировано общим лимитом",
+    "ledger_accounts_uncounted_one": "{{count}} аккаунт не учтён: размер тарифа неизвестен",
+    "ledger_accounts_uncounted_other": "{{count}} аккаунтов не учтено: размер тарифа неизвестен",
     "ledger_blocked_by": "Заблокировано лимитом {{limit}}"
   },
   "plugin_management": {
