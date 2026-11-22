@@ -145,6 +145,20 @@ describe('Theo quota ledger', () => {
     expect(summarizeLedger(accounts, 'codex')).toMatchObject({ remaining: null, uncounted: 0 });
   });
 
+  test('a loaded Free account without a usage figure does not hide the Pro 200 total', () => {
+    const store = emptyStore();
+    store.codexQuota['pro'] = { status: 'success', planType: 'pro', windows: [window('weekly', 91)] };
+    store.codexQuota['free'] = {
+      status: 'success',
+      planType: 'free',
+      windows: [window('monthly', null)],
+    };
+    const accounts = ['pro', 'free'].map((name) =>
+      buildLedgerAccount({ type: 'codex', file: { name, provider: 'codex' } }, store)
+    );
+    expect(summarizeLedger(accounts, 'codex')).toMatchObject({ remaining: 91, uncounted: 1 });
+  });
+
   test('a full Antigravity bucket without a reset time counts as 100%', () => {
     const store = emptyStore();
     const bucket = (window: string, remainingFraction: number, periodHours: number) => ({

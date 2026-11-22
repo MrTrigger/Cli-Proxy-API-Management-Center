@@ -69,7 +69,6 @@ const remainingPercent = (used: number | null) =>
 function antigravityPrimary(groups: AntigravityQuotaGroup[]): LedgerWindow | null {
   const chosen = groups
     .flatMap((group) => group.buckets)
-    .filter((bucket) => Number.isFinite(bucket.remainingFraction))
     .reduce<AntigravityQuotaBucket | null>((best, bucket) => {
       if (best === null) return bucket;
       const byPeriod = (bucket.periodHours ?? 0) - (best.periodHours ?? 0);
@@ -234,7 +233,9 @@ export function summarizeLedger(
   const loaded = selected.filter(({ window }) => window !== null && window.remaining !== null);
   const totalWeight = counted.reduce((sum, { weight }) => sum + (weight ?? 0), 0);
   // An account that has not loaded has no plan yet either, so it is not "unknown size".
-  const allLoaded = group.every((account) => account.primary?.remaining != null);
+  const allLoaded = group.every(
+    (account) => account.plan !== null || account.primary?.remaining != null
+  );
   const complete =
     allLoaded &&
     counted.length > 0 &&

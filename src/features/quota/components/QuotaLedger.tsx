@@ -58,10 +58,13 @@ export function LedgerSummary({
                     <div className={styles.segments}>
                       {accounts
                         .filter((account) => account.entry.type === provider)
-                        .map((account, index) => (
+                        .map((account, index) => ({ account, weight: summary.weights?.[index] }))
+                        // An account left out of the total gets no segment in its bar.
+                        .filter(({ weight }) => weight !== null)
+                        .map(({ account, weight }) => (
                           <LedgerMeter
                             key={account.entry.file.name}
-                            weight={summary.weights?.[index] ?? 1}
+                            weight={weight ?? 1}
                             remaining={
                               account.blockingWindow
                                 ? 0
