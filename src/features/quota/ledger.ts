@@ -31,6 +31,8 @@ type LedgerAccountBase = {
   plan: string | null;
   /** Plan capacity relative to the provider's base plan, or null when unknown. */
   planWeight: number | null;
+  /** The quota fetch succeeded. */
+  loaded: boolean;
 };
 
 export type LedgerAccount = LedgerAccountBase &
@@ -69,7 +71,6 @@ const remainingPercent = (used: number | null) =>
 function antigravityPrimary(groups: AntigravityQuotaGroup[]): LedgerWindow | null {
   const chosen = groups
     .flatMap((group) => group.buckets)
-    .filter((bucket) => Number.isFinite(bucket.remainingFraction))
     .reduce<AntigravityQuotaBucket | null>((best, bucket) => {
       if (best === null) return bucket;
       const byPeriod = (bucket.periodHours ?? 0) - (best.periodHours ?? 0);
@@ -95,7 +96,20 @@ export function buildLedgerAccount(entry: QuotaFileEntry, store: LedgerQuotaStor
         ? store.codexQuota[key]
         : undefined;
   const plan = planQuota?.status === 'success' ? (planQuota.planType ?? null) : null;
-  const planInfo = { plan, planWeight: resolvePlanWeight(entry.type, plan) };
+  const maps = {
+    claude: store.claudeQuota,
+    codex: store.codexQuota,
+    antigravity: store.antigravityQuota,
+    xai: store.xaiQuota,
+    kimi: store.kimiQuota,
+    devin: store.devinQuota,
+    meta: store.metaQuota,
+  };
+  const planInfo = {
+    plan,
+    planWeight: resolvePlanWeight(entry.type, plan),
+    loaded: maps[entry.type][key]?.status === 'success',
+  };
   let windows: ClaudeQuotaWindow[] | null = null;
   if (entry.type === 'claude') {
     const quota = store.claudeQuota[key];
@@ -167,15 +181,6 @@ export function buildLedgerAccount(entry: QuotaFileEntry, store: LedgerQuotaStor
       kind: 'standard',
     };
   }
-  const maps = {
-    claude: store.claudeQuota,
-    codex: store.codexQuota,
-    antigravity: store.antigravityQuota,
-    xai: store.xaiQuota,
-    kimi: store.kimiQuota,
-    devin: store.devinQuota,
-    meta: store.metaQuota,
-  };
   const lane = buildTimelineLane({
     name: key,
     displayName: key,
@@ -234,7 +239,7 @@ export function summarizeLedger(
   const loaded = selected.filter(({ window }) => window !== null && window.remaining !== null);
   const totalWeight = counted.reduce((sum, { weight }) => sum + (weight ?? 0), 0);
   // An account that has not loaded has no plan yet either, so it is not "unknown size".
-  const allLoaded = group.every((account) => account.primary?.remaining != null);
+  const allLoaded = group.every((account) => account.loaded);
   const complete =
     allLoaded &&
     counted.length > 0 &&
@@ -262,7 +267,10 @@ export function summarizeLedger(
     label: counted[0]?.window?.label ?? '',
     blocked: group.filter((account) => account.blockingWindow !== null).length,
     windowId,
-    resetAtMs: resets.length === counted.length && resets.length > 0 ? Math.min(...resets) : null,
+    resetAtMs:
+      allLoaded && resets.length === counted.length && resets.length > 0
+        ? Math.min(...resets)
+        : null,
   };
 }
 
