@@ -1,4 +1,4 @@
-import type { ClaudeQuotaWindow } from '@/types';
+import type { AntigravityQuotaBucket, AntigravityQuotaGroup, ClaudeQuotaWindow } from '@/types';
 import type { QuotaFileEntry } from './logic';
 import type { QuotaProviderType, QuotaStore } from './providers/types';
 import { getQuotaCacheKey } from '@/utils/quota/identity';
@@ -61,6 +61,30 @@ export function resolvePlanWeight(provider: QuotaProviderType, plan: string | nu
 
 const remainingPercent = (used: number | null) =>
   used !== null && Number.isFinite(used) ? Math.max(0, Math.min(100, 100 - used)) : null;
+
+/**
+ * The longest Antigravity bucket, the scarcest one on a tie. A full bucket has no reset time,
+ * so this reads the buckets directly instead of the timeline lane, which needs one.
+ */
+function antigravityPrimary(groups: AntigravityQuotaGroup[]): LedgerWindow | null {
+  const chosen = groups
+    .flatMap((group) => group.buckets)
+    .filter((bucket) => Number.isFinite(bucket.remainingFraction))
+    .reduce<AntigravityQuotaBucket | null>((best, bucket) => {
+      if (best === null) return bucket;
+      const byPeriod = (bucket.periodHours ?? 0) - (best.periodHours ?? 0);
+      if (byPeriod !== 0) return byPeriod > 0 ? bucket : best;
+      return bucket.remainingFraction < best.remainingFraction ? bucket : best;
+    }, null);
+  return chosen
+    ? {
+        id: 'primary',
+        label: '',
+        remaining: Math.max(0, Math.min(100, chosen.remainingFraction * 100)),
+        resetAtMs: chosen.resetAtMs ?? null,
+      }
+    : null;
+}
 
 export function buildLedgerAccount(entry: QuotaFileEntry, store: LedgerQuotaStore): LedgerAccount {
   const key = getQuotaCacheKey(entry.file);
@@ -131,6 +155,18 @@ export function buildLedgerAccount(entry: QuotaFileEntry, store: LedgerQuotaStor
     }
     return { ...base, kind: 'standard' };
   }
+  if (entry.type === 'antigravity') {
+    const quota = store.antigravityQuota[key];
+    const primary = quota?.status === 'success' ? antigravityPrimary(quota.groups) : null;
+    return {
+      entry,
+      windows: primary ? [primary] : [],
+      primary,
+      blockingWindow: null,
+      ...planInfo,
+      kind: 'standard',
+    };
+  }
   const maps = {
     claude: store.claudeQuota,
     codex: store.codexQuota,
@@ -167,15 +203,16 @@ export function buildLedgerAccount(entry: QuotaFileEntry, store: LedgerQuotaStor
 
 /**
  * Weights for summing accounts of different plan sizes. Accounts on the same plan, or a
- * provider without plan weights, weigh the same. Mixed plans need every plan's size; otherwise
- * the result is null rather than a guess. A Max plan without its 5x/20x tier is not one size.
+ * provider without plan weights, weigh the same. With mixed plans an account whose plan size
+ * is unknown gets null and is left out of the total rather than guessed. A Max plan without
+ * its 5x/20x tier is not one size, so two of them are not treated as the same plan.
  */
-export function resolveLedgerWeights(group: LedgerAccount[]): number[] | null {
+export function resolveLedgerWeights(group: LedgerAccount[]): (number | null)[] | null {
   const weights = group.map((account) => account.planWeight);
-  if (weights.every((weight): weight is number => weight !== null)) return weights;
+  if (weights.every((weight) => weight !== null)) return weights;
   const plans = new Set(group.map((account) => account.plan));
-  if (group.length > 1 && plans.has('plan_max')) return null;
-  return plans.size <= 1 ? group.map(() => 1) : null;
+  if (plans.size <= 1 && !(group.length > 1 && plans.has('plan_max'))) return group.map(() => 1);
+  return weights.some((weight) => weight !== null) ? weights : null;
 }
 
 export function summarizeLedger(
@@ -184,41 +221,48 @@ export function summarizeLedger(
   windowId?: string
 ) {
   const group = accounts.filter((account) => account.entry.type === provider);
-  const selected = group.map((account) => ({
+  const weights = resolveLedgerWeights(group);
+  const selected = group.map((account, index) => ({
     account,
+    weight: weights?.[index] ?? null,
     window: windowId
       ? (account.windows.find((window) => window.id === windowId) ?? null)
       : account.primary,
   }));
-  const bucketIds = new Set(selected.flatMap(({ window }) => (window ? [window.id] : [])));
-  const known = selected.flatMap(({ window }) =>
-    window?.remaining === null || window === null ? [] : [window.remaining]
-  );
-  const weights = resolveLedgerWeights(group);
-  const totalWeight = weights?.reduce((sum, weight) => sum + weight, 0) ?? 0;
-  const resets = selected.flatMap(({ account, window }) => {
+  const counted = selected.filter(({ weight }) => weight !== null);
+  const bucketIds = new Set(counted.flatMap(({ window }) => (window ? [window.id] : [])));
+  const loaded = selected.filter(({ window }) => window !== null && window.remaining !== null);
+  const totalWeight = counted.reduce((sum, { weight }) => sum + (weight ?? 0), 0);
+  // An account that has not loaded has no plan yet either, so it is not "unknown size".
+  const allLoaded = group.every((account) => account.primary?.remaining != null);
+  const complete =
+    allLoaded &&
+    counted.length > 0 &&
+    bucketIds.size === 1 &&
+    counted.every(({ window }) => window !== null && window.remaining !== null);
+  const resets = counted.flatMap(({ account, window }) => {
     const instant = account.blockingWindow?.resetAtMs ?? window?.resetAtMs;
     return typeof instant === 'number' && Number.isFinite(instant) ? [instant] : [];
   });
   return {
     provider,
     count: group.length,
-    loaded: known.length,
-    // Share of the provider's combined plan capacity that is left, from 0 to 100.
+    loaded: loaded.length,
+    // Share of the counted accounts' combined plan capacity that is left, from 0 to 100.
     remaining:
-      group.length > 0 &&
-      known.length === group.length &&
-      bucketIds.size === 1 &&
-      weights !== null &&
-      totalWeight > 0
-        ? weights.reduce((sum, weight, index) => sum + weight * (known[index] ?? 0), 0) /
-          totalWeight
+      complete && totalWeight > 0
+        ? counted.reduce(
+            (sum, { weight, window }) => sum + (weight ?? 0) * (window?.remaining ?? 0),
+            0
+          ) / totalWeight
         : null,
     weights,
-    label: selected[0]?.window?.label ?? '',
+    /** Accounts left out of the total because their plan size is unknown. */
+    uncounted: weights === null || !allLoaded ? 0 : group.length - counted.length,
+    label: counted[0]?.window?.label ?? '',
     blocked: group.filter((account) => account.blockingWindow !== null).length,
     windowId,
-    resetAtMs: resets.length === group.length && resets.length > 0 ? Math.min(...resets) : null,
+    resetAtMs: resets.length === counted.length && resets.length > 0 ? Math.min(...resets) : null,
   };
 }
 

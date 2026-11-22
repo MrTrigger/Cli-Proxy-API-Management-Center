@@ -74,6 +74,13 @@ export function LedgerSummary({
                           />
                         ))}
                     </div>
+                    {summary.uncounted > 0 && (
+                      <div className={styles.blocked} role="status">
+                        {t('quota_management.ledger_accounts_uncounted', {
+                          count: summary.uncounted,
+                        })}
+                      </div>
+                    )}
                     {summary.blocked > 0 && (
                       <div className={styles.blocked} role="status">
                         {t('quota_management.ledger_accounts_blocked', { count: summary.blocked })}

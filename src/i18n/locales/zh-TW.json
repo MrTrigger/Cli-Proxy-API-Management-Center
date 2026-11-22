@@ -1622,6 +1622,8 @@
     "ledger_fable": "Fable 每週限額",
     "ledger_accounts_blocked_one": "{{count}} 個帳號受共用限額阻擋",
     "ledger_accounts_blocked_other": "{{count}} 個帳號受共用限額阻擋",
+    "ledger_accounts_uncounted_one": "{{count}} 個帳號未計入：方案額度未知",
+    "ledger_accounts_uncounted_other": "{{count}} 個帳號未計入：方案額度未知",
     "ledger_blocked_by": "受 {{limit}} 限額阻擋"
   },
   "plugin_management": {

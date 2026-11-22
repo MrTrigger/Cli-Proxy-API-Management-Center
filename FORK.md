@@ -10,9 +10,12 @@ meter sized by each account's plan. Accounts are weighted by plan size: Claude
 Pro 1, Max 5x 5 and Max 20x 20 (from the profile's `rate_limit_tier`); Codex
 Plus 1, Pro 100 5 and Pro 200 20 (OpenAI's announced multipliers). A nearly
 spent Max 20x at 44% with a fresh Pro at 78% totals 46%, not 122%. Accounts on
-the same plan weigh the same, as do accounts of other providers. Mixed plans
-with an unknown size, and unloaded, unknown or incompatible quota buckets,
-show no total instead of a guess. It does not measure tokens.
+the same plan weigh the same, as do accounts of other providers. With mixed
+plans, an account whose plan size is unknown (such as Codex Free) is left out
+of the total and the tile says so. Unloaded accounts and incompatible quota
+buckets show no total instead of a guess. Antigravity uses its longest bucket;
+a full bucket counts as 100% even though it has no reset time. It does not
+measure tokens.
 
 Claude rows put the reported Fable weekly bucket first when available, followed
 by the account's other windows. Codex rows keep their own reported windows,

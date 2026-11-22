@@ -1596,6 +1596,8 @@
     "ledger_fable": "Fable 每周限额",
     "ledger_accounts_blocked_one": "{{count}} 个账号受共享限额阻止",
     "ledger_accounts_blocked_other": "{{count}} 个账号受共享限额阻止",
+    "ledger_accounts_uncounted_one": "{{count}} 个账号未计入：套餐额度未知",
+    "ledger_accounts_uncounted_other": "{{count}} 个账号未计入：套餐额度未知",
     "ledger_blocked_by": "受 {{limit}} 限额阻止"
   },
   "plugin_management": {
