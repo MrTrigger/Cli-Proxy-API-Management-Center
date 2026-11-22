@@ -137,12 +137,25 @@ describe('Theo quota ledger', () => {
 
   test('waits for every Codex account before totalling mixed plans', () => {
     const store = emptyStore();
-    store.codexQuota['pro'] = { status: 'success', planType: 'pro', windows: [window('weekly', 91)] };
+    store.codexQuota['pro'] = {
+      status: 'success',
+      planType: 'pro',
+      windows: [{ ...window('weekly', 91), resetAtMs: 2_000 }],
+    };
     store.codexQuota['other'] = { status: 'loading', windows: [] };
     const accounts = ['pro', 'other'].map((name) =>
       buildLedgerAccount({ type: 'codex', file: { name, provider: 'codex' } }, store)
     );
-    expect(summarizeLedger(accounts, 'codex')).toMatchObject({ remaining: null, uncounted: 0 });
+    expect(summarizeLedger(accounts, 'codex')).toMatchObject({
+      remaining: null,
+      uncounted: 0,
+      resetAtMs: null,
+    });
+    store.codexQuota['other'] = { status: 'success', windows: [window('weekly', null)] };
+    const loaded = ['pro', 'other'].map((name) =>
+      buildLedgerAccount({ type: 'codex', file: { name, provider: 'codex' } }, store)
+    );
+    expect(summarizeLedger(loaded, 'codex')).toMatchObject({ remaining: 91, uncounted: 1 });
   });
 
   test('a loaded Free account without a usage figure does not hide the Pro 200 total', () => {
